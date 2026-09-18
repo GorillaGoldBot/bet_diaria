@@ -1,77 +1,49 @@
-import os
-import threading
-import time
-from flask import Flask
+from datetime import datetime
 import requests
 
+# --- CONFIGURAÇÕES ---
 TELEGRAM_TOKEN = "8821213951:AAFAovIS4NZoT9Eto8RZ4E-PKA6_0-2c_Gc"
 CHAT_ID = "8679229910"
-
-app = Flask(__name__)
-
-
-@app.route("/")
-def home():
-    return "Bot de Sinais Online"
+API_FOOTBALL_KEY = "COLE_AQUI_A_SUA_API_KEY"  # <- Cole a chave copiada aqui!
 
 
-# MODIFIQUE APENAS OS JOGOS ABAIXO:
-SINAIS = [
-    {
-        "jogo": "Palmeiras vs Flamengo",
-        "liga": "Brasileirão",
-        "mercado": "Ambas Marcam (Sim)",
-        "odd": "1.75",
-        "horario": "16:00",
-    },
-    {
-        "jogo": "São Paulo vs Corinthians",
-        "liga": "Brasileirão",
-        "mercado": "Mais de 1.5 Gols",
-        "odd": "1.45",
-        "horario": "18:30",
-    },
-]
+def obter_jogos_hoje():
+    hoje = datetime.now().strftime("%Y-%m-%d")
+    url = f"https://v3.football.api-sports.io/fixtures?date={hoje}"
+    headers = {
+        "x-rapidapi-host": "v3.football.api-sports.io",
+        "x-rapidapi-key": API_FOOTBALL_KEY,
+    }
+
+    try:
+        resposta = requests.get(url, headers=headers)
+        dados = resposta.json()
+        jogos = dados.get("response", [])
+        return jogos
+    except Exception as e:
+        print(f"Erro ao procurar jogos: {e}")
+        return []
 
 
-def enviar_mensagem(texto):
+def enviar_mensagem_telegram(texto):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": texto, "parse_mode": "Markdown"}
-    try:
-        requests.post(url, json=payload)
-    except Exception as e:
-        print(f"Erro ao enviar: {e}")
+    requests.post(url, json=payload)
 
 
-def loop_bot():
-    resumo = "🦍 *GORILLA GOLD BOT - LISTA DE SINAIS DO DIA*\n\n"
-    for s in SINAIS:
-        resumo += f"⚽ *{s['jogo']}* ({s['horario']})\n"
-        resumo += f"🏆 {s['liga']} | 🎯 {s['mercado']} | 📈 Odd: {s['odd']}\n\n"
+# --- EXECUÇÃO DO BOT ---
+jogos = obter_jogos_hoje()
 
-    enviar_mensagem(resumo)
+if jogos:
+    mensagem = f"🦍 *GORILLA GOLD BOT - JOGOS DE HOJE ({len(jogos)} encontrados)*\n\n"
+    for jogo in jogos[:5]:  # Mostra os 5 primeiros jogos do dia
+        casa = jogo["teams"]["home"]["name"]
+        fora = jogo["teams"]["away"]["name"]
+        liga = jogo["league"]["name"]
+        mensagem += f"• *{liga}:* {casa} vs {fora}\n"
+else:
+    mensagem = (
+        "🦍 *GORILLA GOLD BOT ATIVADO!*\n\nSem jogos encontrados para hoje."
+    )
 
-    intervalo_segundos = 7200  # 2 horas entre sinais
-
-    while True:
-        for sinal in SINAIS:
-            alerta = (
-                f"🚨 *SINAL CONFIRMADO - GORILLA GOLD*\n\n"
-                f"📌 *Jogo:* {sinal['jogo']}\n"
-                f"🏆 *Liga:* {sinal['liga']}\n"
-                f"⏰ *Horário:* {sinal['horario']}\n\n"
-                f"🎯 *Entrada:* {sinal['mercado']}\n"
-                f"📈 *Odd Sugerida:* {sinal['odd']}\n\n"
-                f"⚠️ _Gerencie sua banca com responsabilidade._"
-            )
-            enviar_mensagem(alerta)
-            time.sleep(intervalo_segundos)
-
-
-if __name__ == "__main__":
-    threading.Thread(target=loop_bot, daemon=True).start()
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
-
-
-
+enviar_mensagem_telegram(mensagem)
